@@ -1,5 +1,5 @@
-# crROMA API Auth Proxy
-
+# crROMA API Proxy
+![DEMO](./image.png)
 A Node.js + Express web app that sits in front of your internal ROMA‑DSPy REST API and provides user accounts, email OTP login, self‑service API keys, and per‑user daily quotas. It validates X-API-Key, enforces limits, then securely proxies requests to your internal API and returns the upstream response.
 
 Key goals:
