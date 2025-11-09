@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const qs = require('querystring');
 const { config, blockedInternalDocsPaths, normalizeInternalPath } = require('../config');
 const { validateFullKey, touchKeyUsage } = require('../models/apiKeys');
 const { incrementToday, isOverLimit, getTodayCount } = require('../models/usage');
@@ -70,6 +71,9 @@ const proxy = createProxyMiddleware({
   target: config.internalApiBase,
   changeOrigin: true,
   logLevel: 'warn',
+  // Give upstream some time; Cloudflare edges typically cap ~100s
+  timeout: 120000,
+  proxyTimeout: 120000,
   pathRewrite: (path, req) => path,
   onProxyReq: (proxyReq, req, res) => {
     // Strip client API key header before forwarding
@@ -77,9 +81,33 @@ const proxy = createProxyMiddleware({
       proxyReq.removeHeader('x-api-key');
       proxyReq.removeHeader('X-API-Key');
     } catch (_) {}
+
     // Forward real IP (best-effort)
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     proxyReq.setHeader('x-real-ip', ip);
+
+    // Re-stream parsed body (Express json/urlencoded) to upstream so POST/PUT/PATCH are not empty
+    const method = (req.method || 'GET').toUpperCase();
+    if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+      if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+        const contentType = req.get('content-type') || req.headers['content-type'] || '';
+        let bodyData = null;
+
+        if (contentType.toLowerCase().includes('application/json')) {
+          try { bodyData = JSON.stringify(req.body); } catch (_) {}
+        } else if (contentType.toLowerCase().includes('application/x-www-form-urlencoded')) {
+          try { bodyData = qs.stringify(req.body); } catch (_) {}
+        }
+
+        if (bodyData) {
+          try {
+            proxyReq.setHeader('content-type', contentType || 'application/json');
+            proxyReq.setHeader('content-length', Buffer.byteLength(bodyData));
+            proxyReq.write(bodyData);
+          } catch (_) {}
+        }
+      }
+    }
   },
   onProxyRes: (proxyRes, req, res) => {
     // Minimal pass-through; annotate response with user id
