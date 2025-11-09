@@ -1,0 +1,6 @@
+# robots.txt for ROMA Auth Proxy
+# Disallow internal app's documentation endpoints exposed via proxy
+User-agent: *
+Disallow: /openapi.json
+Disallow: /redoc
+Allow: /docs

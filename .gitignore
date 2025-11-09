@@ -1,0 +1,50 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+.tmp/
+.temp/
+
+# Coverage
+coverage/
+
+# Environment files (keep example)
+.env
+.env.*
+!.env.example
+
+# SQLite database (runtime data)
+data/*.sqlite
+data/*.sqlite3
+data/*.db
+data/**/*.sqlite
+data/**/*.sqlite3
+data/**/*.db
+
+# TLS certificates/keys
+*.pem
+*.crt
+*.key
+certs/
+secrets/
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Caches
+.cache/
+.eslintcache

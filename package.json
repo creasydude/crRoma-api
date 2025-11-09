@@ -1,0 +1,31 @@
+{
+  "name": "crroma-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "proxy webapp for ROMA internal API with lots of features",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon --watch src --ext js,ejs --exec node src/index.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.9",
+    "express": "^4.19.2",
+    "helmet": "^7.0.0",
+    "http-proxy-middleware": "^3.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mailtrap": "^3.4.0",
+    "morgan": "^1.10.0",
+    "sql.js": "^1.10.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

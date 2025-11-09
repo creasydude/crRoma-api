@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-50">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title><%= title || 'API Docs' %> · ROMA Auth Proxy</title>
+    <link rel="icon" href="/favicon.ico" />
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-full flex flex-col text-slate-900">
+    <!-- Header -->
+    <header class="border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <img src="/logo.jpg" alt="Logo" class="h-9 w-9 rounded-full ring-1 ring-slate-200 object-cover" />
+          <div class="text-lg font-semibold tracking-tight"><%= APP_NAME || 'ROMA Auth Proxy' %></div>
+        </div>
+        <nav class="flex items-center gap-3 text-sm">
+          <a href="/" class="px-3 py-1.5 rounded-md hover:bg-slate-100">Home</a>
+          <a href="/docs" class="px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-800">Docs</a>
+          <% if (currentUser) { %>
+            <a href="/dashboard" class="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-100">Dashboard</a>
+            <a href="/auth/logout" class="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-100">Logout</a>
+          <% } else { %>
+            <a href="/auth/login" class="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-100">Login</a>
+          <% } %>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1">
+      <section class="max-w-5xl mx-auto px-4">
+        <div class="py-10 sm:py-12 space-y-10">
+          <!-- Overview -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6">
+              <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">ROMA REST API (via Auth System)</h1>
+              <p class="mt-3 text-slate-700">
+                This app authenticates requests with user API keys and enforces a daily usage limit per user.
+                Always include the <span class="font-medium">X-API-Key</span> header in your requests.
+              </p>
+              <ul class="mt-4 text-slate-700 list-disc list-inside text-sm">
+                <li>Daily limit: <span class="font-medium"><%= (process.env.DEFAULT_DAILY_LIMIT || '50') %> requests/day</span> per user, resets at midnight UTC.</li>
+                <li>Internal upstream rate limit: 60 requests/min.</li>
+                <li>Note : API docs endpoints (<code>/openapi.json</code>, <code>/docs</code>, <code>/redoc</code>) are blocked.</li>
+                <li>Note : For the better understanding, visit sentinent-agi ROMA github repo and read the docs.</li>
+              </ul>
+              <div class="mt-4 rounded-md bg-slate-50 border border-slate-200 p-4 text-sm">
+                <div class="font-medium mb-1">Base URL</div>
+                <div class="font-mono text-slate-900"><%= (process.env.SITE_BASE_URL || 'https://example.com') %>/</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Getting Started -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6">
+              <h2 class="text-xl font-semibold tracking-tight">Getting Started</h2>
+              <ol class="mt-3 list-decimal list-inside text-slate-700 space-y-1 text-sm">
+                <li>Register or login with your email (we send a 6-digit OTP).</li>
+                <li>Create a new API key in the Dashboard. Copy it once and store it securely.</li>
+                <li>Use the key in the <span class="font-medium">X-API-Key</span> header for all API requests.</li>
+              </ol>
+              <div class="mt-4 font-mono text-sm bg-slate-50 border border-slate-200 rounded p-4 overflow-x-auto">
+                curl -H "X-API-Key: <%= 'ABCDEFG' %>" <%= (process.env.SITE_BASE_URL || 'https://example.com') %>/health
+              </div>
+            </div>
+          </div>
+
+          <!-- Health -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6 space-y-3">
+              <h2 class="text-xl font-semibold tracking-tight">Health</h2>
+              <div class="text-sm">
+                <div class="font-medium">GET /health</div>
+                <p class="text-slate-700 mt-1">Returns service health and status.</p>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Response fields: status, version, uptime_seconds, active_executions, storage_connected, cache_size, timestamp
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Executions -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6 space-y-5">
+              <h2 class="text-xl font-semibold tracking-tight">Executions</h2>
+
+              <div class="text-sm">
+                <div class="font-medium">POST /api/v1/executions</div>
+                <p class="text-slate-700 mt-1">Start a new background execution.</p>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Body: {"goal":"Analyze BTC price drivers","max_depth":2,"config_profile":"default","config_overrides":{"lm.model":"gpt-4o-mini"},"metadata":{"experiment":"crypto-analysis"}}
+                </div>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Success: 202 Accepted → ExecutionResponse (contains execution_id)
+                </div>
+              </div>
+
+              <div class="text-sm">
+                <div class="font-medium">GET /api/v1/executions</div>
+                <p class="text-slate-700 mt-1">List executions with optional filters and pagination.</p>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Query: status, experiment_name, profile, offset (default 0), limit (1..1000; default 100)
+                </div>
+              </div>
+
+              <div class="text-sm">
+                <div class="font-medium">GET /api/v1/executions/{execution_id}</div>
+                <p class="text-slate-700 mt-1">Get detailed execution info, including DAG snapshot.</p>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Errors: 404 if not found
+                </div>
+              </div>
+
+              <div class="text-sm">
+                <div class="font-medium">GET /api/v1/executions/{execution_id}/status</div>
+                <p class="text-slate-700 mt-1">Poll current status, progress, and current task.</p>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Errors: 503 if ExecutionService unavailable; 404 if not found
+                </div>
+              </div>
+
+              <div class="text-sm">
+                <div class="font-medium">POST /api/v1/executions/{execution_id}/cancel</div>
+                <p class="text-slate-700 mt-1">Cancel a running execution.</p>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Errors: 503 if ExecutionService unavailable; 400 if not running; 404 if not found
+                </div>
+              </div>
+
+              <div class="text-sm">
+                <div class="font-medium">GET /api/v1/executions/{execution_id}/data</div>
+                <p class="text-slate-700 mt-1">Consolidated real-time execution data (MLflow traces).</p>
+                <div class="mt-2 font-mono bg-slate-50 border border-slate-200 rounded p-3 overflow-x-auto text-xs">
+                  Env: MLFLOW_TRACKING_URI (default http://127.0.0.1:5000); Errors: 404 if missing; 500 on MLflow/data errors
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Checkpoints -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6 space-y-4">
+              <h2 class="text-xl font-semibold tracking-tight">Checkpoints</h2>
+              <div class="text-sm">
+                <div class="font-medium">GET /api/v1/executions/{execution_id}/checkpoints</div>
+                <p class="text-slate-700 mt-1">List checkpoints for an execution (limit default 50).</p>
+              </div>
+              <div class="text-sm">
+                <div class="font-medium">GET /api/v1/checkpoints/{checkpoint_id}</div>
+                <p class="text-slate-700 mt-1">Get checkpoint metadata.</p>
+              </div>
+              <div class="text-sm">
+                <div class="font-medium">POST /api/v1/checkpoints/{checkpoint_id}/restore</div>
+                <p class="text-slate-700 mt-1">Restore from a checkpoint (MVP returns 501; use CLI).</p>
+              </div>
+              <div class="text-sm">
+                <div class="font-medium">DELETE /api/v1/checkpoints/{checkpoint_id}</div>
+                <p class="text-slate-700 mt-1">Delete a checkpoint.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metrics -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6 space-y-3">
+              <h2 class="text-xl font-semibold tracking-tight">Metrics</h2>
+              <ul class="mt-2 text-sm text-slate-700 space-y-1">
+                <li>GET /api/v1/executions/{execution_id}/metrics — high-level execution metrics</li>
+                <li>GET /api/v1/executions/{execution_id}/costs — cost breakdown and token usage</li>
+                <li>GET /api/v1/executions/{execution_id}/toolkit-metrics — toolkit/tool usage summary</li>
+                <li>GET /api/v1/executions/{execution_id}/toolkit-traces — raw toolkit lifecycle traces</li>
+                <li>GET /api/v1/executions/{execution_id}/tool-invocations — raw tool invocation traces</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Traces -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6 space-y-3">
+              <h2 class="text-xl font-semibold tracking-tight">Traces</h2>
+              <ul class="mt-2 text-sm text-slate-700 space-y-1">
+                <li>GET /api/v1/executions/{execution_id}/lm-traces — list LM call traces</li>
+                <li>GET /api/v1/executions/{execution_id}/lm-traces/cost-summary — aggregated token/cost/latency summary</li>
+                <li>GET /api/v1/executions/{execution_id}/lm-traces/{trace_id}/prompt — full prompt/response of a specific LM trace</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Usage Notes -->
+          <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="p-5 sm:p-6">
+              <h2 class="text-xl font-semibold tracking-tight">Usage Notes</h2>
+              <ul class="mt-2 text-sm text-slate-700 space-y-1">
+                <li>Always include header: <span class="font-mono">X-API-Key: <your-api-key></span></li>
+                <li>Daily quota applies to the user account across all keys.</li>
+                <li>Quota counts requests once validated, regardless of upstream success.</li>
+                <li>Proxy returns 429 if daily limit is exceeded, with seconds until next UTC midnight.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-200 bg-white">
+      <div class="max-w-5xl mx-auto px-4 py-6 flex items-center justify-between text-sm text-slate-600">
+        <div>&copy; <%= new Date().getFullYear() %> crROMA API</div>
+        <a href="https://github.com/creasydude" target="_blank" rel="noopener" class="inline-flex items-center gap-2 hover:text-slate-900">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="h-5 w-5"><path fill="currentColor" d="M12 .5A12 12 0 0 0 0 12.7c0 5.4 3.4 10 8.2 11.6.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.5-1.2-1.3-1.5-1.3-1.5-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 .1.8 2 .8 2 1.9 1.4 4.2 1 5.2.8.1-.7.4-1.2.7-1.5-2.7-.3-5.5-1.4-5.5-6.3 0-1.4.5-2.5 1.2-3.4-.1-.3-.5-1.6.1-3.4 0 0 1-.3 3.5 1.3 1-.3 2-.4 3.1-.4 1.1 0 2.1.1 3.1.4 2.4-1.6 3.5-1.3 3.5-1.3.6 1.8.2 3.2.1 3.4.8.9 1.2 2 1.2 3.4 0 4.9-2.9 6-5.6 6.3.4.3.8 1 .8 2v3c0 .3.2.7.8.6C20.6 22.7 24 18.1 24 12.7A12 12 0 0 0 12 .5Z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </footer>
+  </body>
+</html>
