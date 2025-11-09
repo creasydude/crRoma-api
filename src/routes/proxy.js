@@ -86,6 +86,13 @@ const proxy = createProxyMiddleware({
     // Forward real IP (best-effort)
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     proxyReq.setHeader('x-real-ip', ip);
+    // DEBUG: proxy request metadata
+    try {
+      const ctype = req.get('content-type') || req.headers['content-type'] || '';
+      const clen = req.get('content-length') || req.headers['content-length'] || '';
+      const hasBody = req.body && typeof req.body === 'object' ? Object.keys(req.body).length : 0;
+      console.log('DEBUG proxy onProxyReq method=%s url=%s ct=%s clenH=%s hasBodyKeys=%s', (req.method||'').toUpperCase(), req.originalUrl || req.url, ctype, clen, hasBody);
+    } catch (_) {}
 
     // Re-stream parsed body (Express json/urlencoded) to upstream so POST/PUT/PATCH are not empty
     const method = (req.method || 'GET').toUpperCase();
