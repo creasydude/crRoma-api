@@ -3,6 +3,9 @@
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const qs = require('querystring');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 const { config, blockedInternalDocsPaths, normalizeInternalPath } = require('../config');
 const { validateFullKey, touchKeyUsage } = require('../models/apiKeys');
 const { incrementToday, isOverLimit, getTodayCount } = require('../models/usage');
@@ -139,7 +142,129 @@ const proxy = createProxyMiddleware({
   }
 });
 
-// Catch-all: auth guard first, then proxy
+/**
+ * Manual forward for requests with JSON or x-www-form-urlencoded bodies.
+ * This bypasses http-proxy streaming quirks when bodies were parsed by Express.
+ */
+function forwardBody(req, res, next) {
+  try {
+    const method = String(req.method || 'GET').toUpperCase();
+    // Only handle methods that may have a body
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      return proxy(req, res, next);
+    }
+
+    const originalUrl = req.originalUrl || req.url || '/';
+    const ctypeRaw = req.get('content-type') || req.headers['content-type'] || '';
+    const ctype = String(ctypeRaw).toLowerCase();
+    const isJson = ctype.includes('application/json');
+    const isForm = ctype.includes('application/x-www-form-urlencoded');
+
+    if (!isJson && !isForm) {
+      // Defer to the proxy for other body types
+      return proxy(req, res, next);
+    }
+
+    // Build body string from already-parsed req.body
+    let bodyStr = '';
+    if (req.body && typeof req.body === 'object') {
+      try {
+        bodyStr = isJson ? JSON.stringify(req.body) : qs.stringify(req.body);
+      } catch (e) {
+        bodyStr = '';
+      }
+    }
+
+    const targetUrl = new URL(originalUrl, config.internalApiBase);
+    const isHttps = targetUrl.protocol === 'https:';
+
+    // Build upstream request options
+    const headers = Object.assign({}, req.headers);
+    // Normalize/override headers for upstream
+    delete headers['x-api-key'];
+    delete headers['X-API-Key'];
+    delete headers['host'];
+    delete headers['content-length'];
+    delete headers['transfer-encoding'];
+    headers['content-type'] = ctypeRaw || (isJson ? 'application/json' : 'application/x-www-form-urlencoded');
+    headers['content-length'] = Buffer.byteLength(bodyStr);
+    headers['x-real-ip'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+
+    const opts = {
+      protocol: targetUrl.protocol,
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || (isHttps ? 443 : 80),
+      path: `${targetUrl.pathname}${targetUrl.search}`,
+      method,
+      headers
+    };
+
+    // DEBUG
+    try {
+      console.log('DEBUG forwardBody -> %s %s host=%s ct=%s len=%s', method, opts.path, opts.hostname + ':' + opts.port, headers['content-type'], headers['content-length']);
+    } catch (_) {}
+
+    const transport = isHttps ? https : http;
+    const upstreamReq = transport.request(opts, (upstreamRes) => {
+      // Propagate status and headers
+      res.statusCode = upstreamRes.statusCode || 502;
+      const respHeaders = upstreamRes.headers || {};
+      for (const k in respHeaders) {
+        if (!Object.prototype.hasOwnProperty.call(respHeaders, k)) continue;
+        if (k.toLowerCase() === 'transfer-encoding') continue; // avoid TE issues
+        try { res.setHeader(k, respHeaders[k]); } catch (_) {}
+      }
+      // annotate with user id
+      const userId = req.authProxy && req.authProxy.userId ? String(req.authProxy.userId) : '';
+      if (userId) res.setHeader('x-authproxy-user', userId);
+
+      // Pipe upstream response back to client
+      upstreamRes.on('error', (err) => {
+        try { console.error('DEBUG forwardBody upstreamRes error:', err && err.message); } catch (_) {}
+        if (!res.headersSent) {
+          res.statusCode = 502;
+          res.setHeader('content-type', 'application/json');
+          return res.end(JSON.stringify({ error: 'Upstream response error' }));
+        }
+        try { res.destroy(err); } catch (_) {}
+      });
+      upstreamRes.pipe(res);
+    });
+
+    upstreamReq.setTimeout(60000, () => {
+      try { upstreamReq.destroy(new Error('upstream timeout')); } catch (_) {}
+    });
+
+    upstreamReq.on('error', (err) => {
+      try { console.error('DEBUG forwardBody upstreamReq error:', err && err.message); } catch (_) {}
+      if (!res.headersSent) {
+        res.statusCode = 502;
+        res.setHeader('content-type', 'application/json');
+        return res.end(JSON.stringify({ error: 'Upstream request error' }));
+      }
+      try { res.destroy(err); } catch (_) {}
+    });
+
+    // Write body and end
+    if (headers['content-length'] > 0) {
+      upstreamReq.write(bodyStr);
+    }
+    upstreamReq.end();
+  } catch (e) {
+    try { console.error('DEBUG forwardBody fatal:', e && e.message); } catch (_) {}
+    res.statusCode = 502;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: 'Proxy forwarding error' }));
+  }
+}
+
+// Route JSON/form bodies through manual forwarder first
+router.post('*', proxyAuthGuard, forwardBody);
+router.put('*', proxyAuthGuard, forwardBody);
+router.patch('*', proxyAuthGuard, forwardBody);
+router.delete('*', proxyAuthGuard, forwardBody);
+
+// Catch-all: auth guard first, then proxy (handles GET and other methods/content-types)
 router.use(proxyAuthGuard, proxy);
 
 module.exports = router;
