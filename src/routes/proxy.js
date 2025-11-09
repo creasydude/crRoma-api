@@ -71,6 +71,7 @@ const proxy = createProxyMiddleware({
   target: config.internalApiBase,
   changeOrigin: true,
   logLevel: 'warn',
+  xfwd: true,
   // Give upstream some time; Cloudflare edges typically cap ~100s
   timeout: 120000,
   proxyTimeout: 120000,
@@ -90,20 +91,28 @@ const proxy = createProxyMiddleware({
     const method = (req.method || 'GET').toUpperCase();
     if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
       if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
-        const contentType = req.get('content-type') || req.headers['content-type'] || '';
-        let bodyData = null;
+        const contentTypeRaw = req.get('content-type') || req.headers['content-type'] || '';
+        const contentType = String(contentTypeRaw).toLowerCase();
+        let bodyBuf = null;
 
-        if (contentType.toLowerCase().includes('application/json')) {
-          try { bodyData = JSON.stringify(req.body); } catch (_) {}
-        } else if (contentType.toLowerCase().includes('application/x-www-form-urlencoded')) {
-          try { bodyData = qs.stringify(req.body); } catch (_) {}
+        if (contentType.includes('application/json')) {
+          try { bodyBuf = Buffer.from(JSON.stringify(req.body)); } catch (_) {}
+        } else if (contentType.includes('application/x-www-form-urlencoded')) {
+          try { bodyBuf = Buffer.from(qs.stringify(req.body)); } catch (_) {}
         }
 
-        if (bodyData) {
+        if (bodyBuf && bodyBuf.length > 0) {
           try {
+            // reset potentially conflicting headers before setting our own
+            try { proxyReq.removeHeader('content-length'); } catch (_) {}
+            try { proxyReq.removeHeader('transfer-encoding'); } catch (_) {}
+            try { proxyReq.removeHeader('expect'); } catch (_) {}
+
             proxyReq.setHeader('content-type', contentType || 'application/json');
-            proxyReq.setHeader('content-length', Buffer.byteLength(bodyData));
-            proxyReq.write(bodyData);
+            proxyReq.setHeader('content-length', bodyBuf.length);
+            proxyReq.write(bodyBuf);
+            // Explicitly end because the original req stream was already consumed by body parsers
+            try { proxyReq.end(); } catch (_) {}
           } catch (_) {}
         }
       }
@@ -113,6 +122,13 @@ const proxy = createProxyMiddleware({
     // Minimal pass-through; annotate response with user id
     const userId = req.authProxy && req.authProxy.userId ? String(req.authProxy.userId) : '';
     if (userId) res.setHeader('x-authproxy-user', userId);
+  },
+  onError: (err, req, res) => {
+    try {
+      const code = (err && err.code) ? String(err.code) : 'proxy_error';
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Upstream proxy error', code }));
+    } catch (_) {}
   }
 });
 
